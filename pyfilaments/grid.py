@@ -86,7 +86,7 @@ class Grid():
         plt.pcolormesh(xx, yy, vals_2d)
         plt.show()
 
-    def plot_list_3d(self, vals):
+    def plot_list_3d(self, vals, color_vals=None):
         # Put the values back to a 2d array.
         vals_2d = self.reshape_to_2d(vals)
 
@@ -94,5 +94,15 @@ class Grid():
 
         fig = plt.figure(figsize=(6,6))
         ax = fig.add_subplot(111, projection='3d')
-        ax.plot_surface(xx, yy, vals_2d, cmap='viridis')
+        
+        if color_vals is not None:
+            color_vals_2d = self.reshape_to_2d(color_vals)
+
+            N = color_vals_2d/color_vals_2d.max()  # normalize 0..1
+            ax.plot_surface(xx, yy, vals_2d, facecolors=cm.jet(N),
+                    rstride=1, cstride=1, linewidth=0, antialiased=False,
+                    shade=False)
+
+        else: ax.plot_surface(xx, yy, vals_2d, cmap='viridis')
+
         plt.show()

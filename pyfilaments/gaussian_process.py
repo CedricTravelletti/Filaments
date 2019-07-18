@@ -48,6 +48,9 @@ class GaussianProcess():
         self.ncond = conditioning_grid.n_cells
         self.nsim = simulation_grid.n_cells
 
+        self.simulation_grid = simulation_grid
+        self.conditioning_grid = conditioning_grid
+
 
         # Create a tempory array containing ALL cells.
         # The conditioninig ones are first, then the simulation ones.
@@ -58,9 +61,8 @@ class GaussianProcess():
                         conditioning_grid.cells_list,
                         simulation_grid.cells_list)))
 
-        tmp_cov = cl.compute_full_cov(self.lambda0,
-                full_cells,
-                device=cpu)
+        tmp_cov = self.sigma0**2 *cl.compute_full_cov(
+                self.lambda0,full_cells,device=cpu)
 
         # Extract back the values.
         self.cov_cond = tmp_cov[:self.ncond, :self.ncond]
@@ -98,10 +100,30 @@ class GaussianProcess():
             Krigging mean at the simulation points.
 
         """
+        self.kriging_weights = torch.mm(
+                torch.inverse(self.cov_cond),
+                cond_points_vals.reshape(-1, 1))
+
         sim_points_vals = torch.mm(
             self.cov_sim_cond,
-            torch.mm(
-                torch.inverse(self.cov_cond),
-                cond_points_vals.reshape(-1, 1)))
+            self.kriging_weights)
 
         return sim_points_vals.numpy()
+
+    def derivative(self):
+        sim_cells = torch.from_numpy(self.simulation_grid.cells_list)
+        cond_cells = torch.from_numpy(self.conditioning_grid.cells_list)
+
+        nsim = self.nsim
+        ncond = self.ncond
+        ndim = 2
+
+        tmp = (
+            self.cov_sim_cond.unsqueeze(2).expand(nsim, ncond, ndim)
+            * (
+                sim_cells.unsqueeze(1).expand(nsim, ncond, ndim)
+                - cond_cells.unsqueeze(0).expand(nsim, ncond, ndim)))
+        tmp = - (1 / self.lambda0**2) * tmp
+        gradient = torch.einsum("ijk,jl->ik", (tmp, self.kriging_weights))
+
+        return gradient

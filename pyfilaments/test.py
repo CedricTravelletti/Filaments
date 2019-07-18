@@ -24,8 +24,8 @@ cpu = torch.device('cpu')
 n_cond_x = 10
 n_cond_y = 10
 
-n_sim_x = 50
-n_sim_y = 50
+n_sim_x = 100
+n_sim_y = 100
 
 
 x_spacings_cond = np.linspace(0, 1, n_cond_x)
@@ -54,6 +54,49 @@ mean = np.zeros(mygp.cov_cond.shape[0])
 cond_points_vals = np.random.multivariate_normal(mean, mygp.cov_cond)
 cond_points_vals = torch.from_numpy(cond_points_vals.astype(np.float32))
 sim_points_vals = mygp.condition(cond_points_vals)
-simulation_grid.plot_list(sim_points_vals)
+# simulation_grid.plot_list(sim_points_vals)
 
-simulation_grid.plot_list_3d(sim_points_vals)
+# simulation_grid.plot_list_3d(sim_points_vals)
+
+grad = mygp.derivative()
+norm = torch.einsum("ij,ij->i", (grad, grad))
+norm = torch.sqrt(norm)
+simulation_grid.plot_list_3d(sim_points_vals, norm)
+
+
+# -----------------------------------------
+# -----------------------------------------
+# VERIFIY with matplotlib that we have the same gradient.
+vals_2d = simulation_grid.reshape_to_2d(sim_points_vals)
+tmp_2d = simulation_grid.reshape_to_2d(sim_points_vals)
+Gx, Gy = np.gradient(tmp_2d)
+G = (Gx**2+Gy**2)**.5  # gradient magnitude
+N = G/G.max()  # normalize 0..1
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import axes3d
+from matplotlib import cm
+
+fig = plt.figure()
+ax = fig.gca(projection='3d')
+X, Y = np.meshgrid(simulation_grid.x_spacings, simulation_grid.y_spacings)
+
+surf = ax.plot_surface(
+            X, Y, vals_2d, rstride=1, cstride=1,
+                facecolors=cm.jet(N),
+                    linewidth=0, antialiased=False,
+                    shade=False)
+plt.show()
+# -----------------------------------------
+# -----------------------------------------
+# Plot the difference in gradients.
+norm_2d = simulation_grid.reshape_to_2d(norm)
+diff = np.abs(G - norm_2d.numpy())
+N = diff/diff.max()  # normalize 0..1
+
+surf = ax.plot_surface(
+            X, Y, vals_2d, rstride=1, cstride=1,
+                facecolors=cm.jet(diff),
+                    linewidth=0, antialiased=False,
+                    shade=False)
+plt.show()
