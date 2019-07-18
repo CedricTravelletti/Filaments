@@ -58,8 +58,8 @@ sim_points_vals = mygp.condition(cond_points_vals)
 
 # simulation_grid.plot_list_3d(sim_points_vals)
 
-grad = mygp.gradient()
-norm = torch.einsum("ij,ij->i", (grad, grad))
+gradient = mygp.gradient()
+norm = torch.einsum("ij,ij->i", (gradient, gradient))
 norm = torch.sqrt(norm)
 simulation_grid.plot_list_3d(sim_points_vals, norm)
 
@@ -98,5 +98,29 @@ surf = ax.plot_surface(
             X, Y, vals_2d, rstride=1, cstride=1,
                 facecolors=cm.jet(diff),
                     linewidth=0, antialiased=False,
+                    shade=False)
+plt.show()
+
+hessian = mygp.hessian()
+
+# To filament estimation.
+filament_inds, filament_vals = mygp.compute_filament_criterion(
+        gradient, hessian, 1e-2)
+
+# Plot results.
+norm[:] = 0.3
+norm[filament_inds] = 1.0
+simulation_grid.plot_list_3d(sim_points_vals, norm)
+
+# Custom Plotting.
+norm_2d = simulation_grid.reshape_to_2d(norm)
+N = diff/diff.max()  # normalize 0..1
+
+fig = plt.figure()
+ax = fig.gca(projection='3d')
+surf = ax.plot_surface(
+            X, Y, vals_2d, rstride=1, cstride=1,
+                facecolors=cm.jet(norm_2d),
+                    antialiased=False,
                     shade=False)
 plt.show()

@@ -127,11 +127,13 @@ class GaussianProcess():
         ncond = self.ncond
         ndim = 2
 
+        # y_alpha - x_i, along each dimension.
+        # Hence has dim nsim * ncond * ndim.
+        diff = (sim_cells.unsqueeze(1).expand(nsim, ncond, ndim)
+                - cond_cells.unsqueeze(0).expand(nsim, ncond, ndim))
         tmp = (
             self.cov_sim_cond.unsqueeze(2).expand(nsim, ncond, ndim)
-            * (
-                sim_cells.unsqueeze(1).expand(nsim, ncond, ndim)
-                - cond_cells.unsqueeze(0).expand(nsim, ncond, ndim)))
+            * diff)
         tmp = - (1 / self.lambda0**2) * tmp
 
         # Notice the dim of tmp: nsim * ncond * ndim.
@@ -139,3 +141,78 @@ class GaussianProcess():
         gradient = torch.einsum("ijk,jl->ik", (tmp, self.kriging_weights))
 
         return gradient
+
+    def hessian(self):
+        """ Computes hessian of the field.
+
+        Returns
+        -------
+        Tensor
+            nsim * ndim * ndim array containing components of the gradient at every
+            point.
+
+        """
+        sim_cells = torch.from_numpy(self.simulation_grid.cells_list)
+        cond_cells = torch.from_numpy(self.conditioning_grid.cells_list)
+
+        nsim = self.nsim
+        ncond = self.ncond
+        ndim = 2
+
+        # y_alpha - x_i, along each dimension.
+        # Hence has dim nsim * ncond * ndim.
+        diff = (sim_cells.unsqueeze(1).expand(nsim, ncond, ndim)
+                - cond_cells.unsqueeze(0).expand(nsim, ncond, ndim))
+
+        # Now add a dimension containing all mixed products to compute the
+        # hessian.
+        # This has dimension nsim * ncond * ndim * ndim.
+        diff_mat = torch.einsum("abi,abj->abij", (diff, diff))
+
+        # The full factor come with ones, hence have to squash the identity in
+        # there.
+        identity = torch.eye(ndim).unsqueeze(0).expand(nsim, ncond, ndim, ndim)
+
+        # Whole factor to multiply with cov.
+        tmp = (1 / self.lambda0**4) * (diff_mat - self.lambda0**2 * identity)
+
+        # Compute all products.
+        expanded_cov = self.cov_sim_cond.unsqueeze(2).expand(nsim, ncond, ndim)
+        expanded_cov = expanded_cov.unsqueeze(3).expand(nsim, ncond, ndim, ndim)
+        tmp = (expanded_cov * tmp)
+
+        # Notice the dim of tmp: nsim * ncond * ndim * ndim
+
+        hessian = torch.einsum("ijkm,jl->ikm", (tmp, self.kriging_weights))
+
+        return hessian
+
+    def compute_filament_criterion(self, gradient, hessian, tol):
+        filament_inds = []
+        filament_vals = []
+    
+        # Loop over all cells.
+        for i in range(self.nsim):
+            current_hess = hessian[i, :, :]
+            # Compute eigenvalues and eigenvectors.
+            e, v = torch.symeig(current_hess, eigenvectors=True)
+        
+            # Notice the order.
+            eigv1 = v[:, 0]
+            eigv2 = v[:, 1]
+        
+            # Find smallest eigenvalue and belonging eigenvector.
+            small_val, small_ind = torch.min(e, 0)
+            small_eigv = v[:, small_ind]
+        
+            # If negative curavture.
+            if small_val < 1e-9:
+                # If scalar product of smallest eigenvector with gradient
+                # is zero, we are on a filament.
+                criterion = torch.dot(gradient[i, :], small_eigv)
+
+                if np.abs(criterion) < tol:
+                    filament_inds.append(i)
+                    filament_vals.append(criterion)
+    
+        return filament_inds, filament_vals
