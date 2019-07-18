@@ -110,7 +110,16 @@ class GaussianProcess():
 
         return sim_points_vals.numpy()
 
-    def derivative(self):
+    def gradient(self):
+        """ Computes gradient of the field.
+
+        Returns
+        -------
+        Tensor
+            nsim * ndim array containing components of the gradient at every
+            point.
+
+        """
         sim_cells = torch.from_numpy(self.simulation_grid.cells_list)
         cond_cells = torch.from_numpy(self.conditioning_grid.cells_list)
 
@@ -124,6 +133,9 @@ class GaussianProcess():
                 sim_cells.unsqueeze(1).expand(nsim, ncond, ndim)
                 - cond_cells.unsqueeze(0).expand(nsim, ncond, ndim)))
         tmp = - (1 / self.lambda0**2) * tmp
+
+        # Notice the dim of tmp: nsim * ncond * ndim.
+
         gradient = torch.einsum("ijk,jl->ik", (tmp, self.kriging_weights))
 
         return gradient

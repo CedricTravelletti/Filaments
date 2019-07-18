@@ -58,7 +58,7 @@ sim_points_vals = mygp.condition(cond_points_vals)
 
 # simulation_grid.plot_list_3d(sim_points_vals)
 
-grad = mygp.derivative()
+grad = mygp.gradient()
 norm = torch.einsum("ij,ij->i", (grad, grad))
 norm = torch.sqrt(norm)
 simulation_grid.plot_list_3d(sim_points_vals, norm)
