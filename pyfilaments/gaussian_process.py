@@ -69,20 +69,17 @@ class GaussianProcess():
         self.cov_sim = tmp_cov[-self.nsim:, -self.nsim:]
         self.cov_sim_cond = tmp_cov[-self.nsim:, :self.ncond]
 
+        # Prepare random part for conditioning.
+        self.mean = np.zeros(self.ncond)
+
+    def simulate_conditioning_points(self):
+        """ Simulate field values at conditioning points.
 
         """
-        cov_full = sigma0**2 * cov_full
+        cond_points_vals = np.random.multivariate_normal(self.mean, self.cov_cond)
+        cond_points_vals = torch.from_numpy(cond_points_vals.astype(np.float32))
 
-        # Do not need the full one, hence extract covariance between
-        # conditioning points themselves, and between conditioning points and
-        # simulation points.
-        # EXTRACT THE BLOCKS.
-        self.cov_cond= cov_full[:self.n_conds, :self.n_conds]
-
-        # Covarianve between simulation points and data points.
-        self.cov_sims_cond = cov_full[self.n_conds+1:, :self.n_conds]
-        self.cov_full = cov_full
-        """
+        return cond_points_vals
 
     def condition(self, cond_points_vals):
         """ Condition on the values at the conditioning points.
@@ -109,6 +106,11 @@ class GaussianProcess():
             self.kriging_weights)
 
         return sim_points_vals.numpy()
+
+    def generate_pseudorealization(self):
+        cond_points_vals = self.simulate_conditioning_points()
+        sim_points_vals = self.condition(cond_points_vals)
+        return sim_points_vals
 
     def gradient(self):
         """ Computes gradient of the field.
